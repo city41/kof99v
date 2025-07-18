@@ -1,0 +1,27 @@
+{
+  "name": "kof99tte",
+  "version": "0.0.0",
+  "repository": "git@github.com:city41/kof94te.git",
+  "author": "Matt Greer <matt.e.greer@gmail.com>",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "restore": "cp kof99.zip $MAME_ROM_DIR",
+    "type-check": "yarn tsc --noemit",
+    "to-neosd": "bash scripts/toneosd.sh",
+    "mame": "mame -w -nofilter -nomouse -sound none kof99",
+    "mames": "mame -w -nofilter -nomouse kof99"
+  },
+  "dependencies": {
+    "@city41/sromcrom": "^0.15.1",
+    "@types/color-diff": "^1.2.5",
+    "@types/lodash": "^4.17.4",
+    "@types/mkdirp": "^2.0.0",
+    "@types/node": "^20.11.25",
+    "canvas": "^2.11.2",
+    "color-diff": "^1.4.0",
+    "lodash": "^4.17.21",
+    "mkdirp": "^3.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.2"
+  }
+}
