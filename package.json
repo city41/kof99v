@@ -9,7 +9,6 @@
     "type-check": "yarn tsc --noemit",
     "to-neosd": "bash scripts/toneosd.sh",
     "mame": "mame -w -nofilter -nomouse -sound none kof99",
-    "mamed": "mame -w -nofilter -nomouse -sound none -debug kof99",
     "mames": "mame -w -nofilter -nomouse kof99"
   },
   "dependencies": {

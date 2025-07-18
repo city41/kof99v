@@ -1,3 +1,5 @@
+# PROM Zero areas
+
 Obtained with src/tools/zeroReport.ts
 
 These are the sections in the p1 rom that contain zeros
