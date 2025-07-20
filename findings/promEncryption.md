@@ -1,6 +1,11 @@
 # PROM Encryption
 
-It seems the proms are lightly encrypted. My guess so far is it just applies a rotatio to every word in the file.
+the PROMs are encrypted and the sma chip on the prog board does the decryption at run time.
 
-input 0101 - 0000 0001 0000 0001
-output 1020 - 0001 0000 0010 0000
+iq_132 of the neosource forums provided a c program that can decrypt and encrypt SMA PROMs.
+
+https://neo-source.com/index.php?topic=1066.0
+
+The code for this was pulled into `src/promEncryption/src/` and altered a bit.
+
+That code was then ported to typescript at `src/patchRom/sma.ts`
