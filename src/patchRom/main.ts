@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import path from "node:path";
 import fsp from "node:fs/promises";
 import * as mkdirp from "mkdirp";
@@ -30,6 +31,20 @@ function usage() {
     "usage: ts-node src/patchRom/main.ts <a94 or a95> <patch-jsons...>"
   );
   process.exit(1);
+}
+
+async function getSma(zipPath: string): Promise<number[]> {
+  const cmd = `unzip -o ${zipPath} -d ${romTmpDir}`;
+  const cwd = path.resolve();
+  console.log("About to do", cmd, "in", cwd);
+  const output = execSync(cmd, { cwd });
+  console.log(output.toString());
+
+  const smaData = Array.from(
+    await fsp.readFile(path.resolve(romTmpDir, SMA_FILE_NAME))
+  );
+
+  return Array.from(smaData);
 }
 
 async function getEntireDecryptedProm(zipPath: string): Promise<number[]> {
@@ -197,12 +212,18 @@ function isPatchJSON(obj: unknown): obj is PatchJSON {
 }
 
 async function writePatchedZip(
+  smaData: number[],
   p1Data: number[],
   p2Data: number[],
   cromBuffers: RomFileBuffer[],
   // fixBuffer: RomFileBuffer,
   outputPath: string
 ): Promise<void> {
+  await fsp.writeFile(
+    path.resolve(romTmpDir, SMA_FILE_NAME),
+    new Uint8Array(smaData)
+  );
+
   await fsp.writeFile(
     path.resolve(romTmpDir, P1_FILE_NAME),
     new Uint8Array(p1Data)
@@ -273,6 +294,23 @@ function loadInitialSymbols(
   );
 }
 
+async function assertSmaDiff(patchedEncryptedSmaData: number[]) {
+  return;
+  const ogSma = await getSma(path.resolve("./kof99.zip"));
+
+  assert(
+    ogSma.length === patchedEncryptedSmaData.length,
+    "assertSmaDiff, lenghts differ"
+  );
+
+  let foundDiffByte = false;
+  for (let i = 0; i < ogSma.length; ++i) {
+    foundDiffByte = foundDiffByte || ogSma[i] !== patchedEncryptedSmaData[i];
+  }
+
+  assert(foundDiffByte, "patched sma is the same as the original");
+}
+
 async function main(patchJsonPaths: string[]) {
   try {
     await fsp.rm(tmpDir, {
@@ -289,10 +327,9 @@ async function main(patchJsonPaths: string[]) {
     );
     const flippedPromData = Array.from(flippedPromBuffer);
     const promData = flipBytes(flippedPromData);
+    assert(promData.length === 0x900000, "promData is not 9mb");
 
-    // the prom data inside the decrypted bundle starts 1mb in
-    // later it's important to reattach the starting meg during decryption
-    let patchedPromData = promData.slice(0x100000);
+    let patchedPromData = [...promData];
 
     for (const patchJsonPath of patchJsonPaths) {
       const jsonDir = path.dirname(patchJsonPath);
@@ -387,16 +424,21 @@ async function main(patchJsonPaths: string[]) {
       }
     }
 
+    console.log(
+      "is patch in the final data?",
+      patchedPromData.slice(0x107da, 0x107da + 2).map((b) => b.toString(16))
+    );
+
     const flippedBackPromData = flipBytes(patchedPromData);
-    const startingMeg = flippedPromData.slice(0, 0x100000);
-    const fullPromBundleAfterPatch = startingMeg.concat(flippedBackPromData);
-    const reencrypted = smaEncrypt(fullPromBundleAfterPatch);
+    const reencrypted = smaEncrypt(flippedBackPromData);
 
     const mameDir = process.env.MAME_ROM_DIR;
 
     if (!mameDir?.trim()) {
       throw new Error("MAME_ROM_DIR env variable is not set");
     }
+
+    await assertSmaDiff(reencrypted.sma);
 
     // const cromBuffers = await injectCromTiles();
     // const finalCromBuffers = await injectTitleBadgeTiles(cromBuffers);
@@ -406,6 +448,7 @@ async function main(patchJsonPaths: string[]) {
 
     const writePath = path.resolve(mameDir, "kof99.zip");
     await writePatchedZip(
+      reencrypted.sma,
       reencrypted.p1,
       reencrypted.p2,
       finalCromBuffers,

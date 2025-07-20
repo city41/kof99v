@@ -1,0 +1,12 @@
+{
+  "description": "fill p1 third megabyte with a dummy byte",
+  "patches": [
+    {
+      "type": "prom-fill-word",
+      "description": "fill p1 with a dummy byte",
+      "fillerWord": "a777",
+      "address": 6291456,
+      "size": 1048576
+    }
+  ]
+}

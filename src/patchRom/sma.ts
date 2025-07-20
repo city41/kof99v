@@ -1,4 +1,5 @@
 type SMAEncryptResult = {
+  sma: number[];
   p1: number[];
   p2: number[];
 };
@@ -11,10 +12,61 @@ const dataSwapBitIndexesForDecryption = [
   13, 7, 3, 0, 9, 4, 5, 6, 1, 12, 8, 14, 10, 11, 2, 15,
 ];
 
-const p1AddressSwapBitIndexes = [
-  23, 22, 21, 20, 19, 18, 11, 6, 14, 17, 16, 5, 8, 10, 12, 0, 4, 3, 2, 7, 9, 15,
-  13, 1,
+const p1AddressSwapBitIndexesForDecryption = [
+  23, // 23
+  22, // 22
+  21, // 21
+  20, // 20
+  19, // 19
+  18, // 18
+
+  11, // 17
+  6, // 16
+  14, // 15
+  17, // 14
+  16, // 13
+  5, // 12
+  8, // 11
+  10, // 10
+  12, // 9
+  0, // 8
+  4, // 7
+  3, // 6
+  2, // 5
+  7, // 4
+  9, // 3
+  15, // 2
+  13, // 1
+  1, // 0
 ];
+
+// const p1AddressSwapBitIndexesForEncryption = [
+//   23, // 23
+//   22, // 22
+//   21, // 21
+//   20, // 20
+//   19, // 19
+//   18, // 18
+
+//   14, // 17
+//   13, // 16
+//   2, // 15
+//   15, // 14
+//   1, // 13
+//   9, // 12
+//   17, // 11
+//   10, // 10
+//   3, // 9
+//   11, // 8
+//   4, // 7
+//   16, // 6
+//   12, // 5
+//   7, // 4
+//   6, // 3
+//   5, // 2
+//   0, // 1
+//   8, // 0
+// ];
 
 const p2AddressSwapBitIndexesForEncryption = [
   15, 14, 13, 12, 11, 10, 6, 5, 2, 9, 0, 7, 4, 8, 3, 1,
@@ -71,6 +123,7 @@ function smaDecrypt(
     decrypted[i] = v;
   }
 
+  // unscramble the words individually from 1mb->9mb, ie p1 and p2
   const baseWordAddress = 0x100000 / 2;
   for (let i = 0; i < 0x800000 / 2; i++) {
     const wordAddress = baseWordAddress + i;
@@ -81,9 +134,10 @@ function smaDecrypt(
     insert(byteAddress, swapped & 0xff);
   }
 
+  // move words from various places down into the filler area, ahead of esma
   for (let i = 0; i < 0x0c0000 / 2; i++) {
     const wordAddress =
-      p1AddressOffset / 2 + bitswap(i, p1AddressSwapBitIndexes);
+      p1AddressOffset / 2 + bitswap(i, p1AddressSwapBitIndexesForDecryption);
     const byteAddress = wordAddress * 2;
 
     insert(i * 2, decrypted[byteAddress]);
@@ -134,6 +188,16 @@ function smaEncrypt(decryptedPromBundle: number[]): SMAEncryptResult {
     encrypted[i] = v;
   }
 
+  // move words from the filler area back into p1/p2
+  for (let i = 0; i < 0x0c0000 / 2; i++) {
+    const wordAddress =
+      p1AddressOffset / 2 + bitswap(i, p1AddressSwapBitIndexesForDecryption);
+    const byteAddress = wordAddress * 2;
+
+    insert(byteAddress, encrypted[i * 2]);
+    insert(byteAddress + 1, encrypted[i * 2 + 1]);
+  }
+
   const baseWordAddress = 0x100000 / 2;
   for (let i = 0; i < 0x800000 / 2; i++) {
     const wordAddress = baseWordAddress + i;
@@ -171,6 +235,7 @@ function smaEncrypt(decryptedPromBundle: number[]): SMAEncryptResult {
   }
 
   return {
+    sma: encrypted.slice(0xc0000, 0xc0000 + 0x40000),
     p1: encrypted.slice(0x100000, 0x100000 + 0x400000),
     p2: encrypted.slice(0x500000, 0x500000 + 0x400000),
   };

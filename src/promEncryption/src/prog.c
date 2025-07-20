@@ -62,6 +62,7 @@ static void SMAcrypt(int type, int crypt) // crypt 1 = encrypt, 0 = decrypt
 
   //   printf("start first loop\n");
 
+  // scramble or unscramble all of the words that make up p1 and p2;
   for (i = 0; i < 0x800000 / 2; i++) {
     unsigned short before = ((unsigned short *)(src + 0x100000))[i];
     unsigned short after =
@@ -77,6 +78,7 @@ static void SMAcrypt(int type, int crypt) // crypt 1 = encrypt, 0 = decrypt
 
   //   printf("end first loop\n");
 
+  // if decrypting, grab words out and move them before 0xc0000
   if (crypt == 0) {
     // printf("start second loop\n");
     for (i = 0; i < 0x0c0000 / 2; i++) {
@@ -98,10 +100,10 @@ static void SMAcrypt(int type, int crypt) // crypt 1 = encrypt, 0 = decrypt
     // printf("end second loop\n");
   }
 
-  printf("start third loop\n");
+  // printf("start third loop\n");
 
   for (i = 0; i < d[1] / 2; i += 0x010000 / 2) {
-    printf("i: %d\n", i);
+    // printf("i: %d\n", i);
     unsigned short nBuffer[0x010000 / 2];
     memcpy(nBuffer, &((unsigned short *)(src + 0x100000))[i], 0x010000);
     for (j = 0; j < 0x010000 / 2; j++) {
@@ -110,7 +112,7 @@ static void SMAcrypt(int type, int crypt) // crypt 1 = encrypt, 0 = decrypt
           j, 23, 22, 21, 20, 19, 18, 17, 16, c[0], c[1], c[2], c[3], c[4], c[5],
           c[6], c[7], c[8], c[9], c[10], c[11], c[12], c[13], c[14], c[15])];
 
-      printf("b:%hu, a:%hu\n", before, after);
+      // printf("b:%hu, a:%hu\n", before, after);
 
       ((unsigned short *)(src + 0x100000))[i + j] = nBuffer[BITSWAP24(
           j, 23, 22, 21, 20, 19, 18, 17, 16, c[0], c[1], c[2], c[3], c[4], c[5],
@@ -118,7 +120,7 @@ static void SMAcrypt(int type, int crypt) // crypt 1 = encrypt, 0 = decrypt
     }
   }
 
-  printf("end third loop\n");
+  // printf("end third loop\n");
 }
 
 int main(int argc, char *argv[]) {

@@ -42,13 +42,22 @@ describe("sma", function () {
 
       const reEncryptedResult = smaEncrypt(decrypted);
 
+      expect(reEncryptedResult.sma.length).toBe(smaData.length);
       expect(reEncryptedResult.p1.length).toBe(p1Data.length);
       expect(reEncryptedResult.p2.length).toBe(p2Data.length);
+
+      for (let i = 0; i < reEncryptedResult.sma.length; ++i) {
+        if (reEncryptedResult.sma[i] !== smaData[i]) {
+          throw new Error(
+            `sma byte at index ${i}/${reEncryptedResult.sma.length} differs: expected(${smaData[i]}), actual(${reEncryptedResult.sma[i]})`
+          );
+        }
+      }
 
       for (let i = 0; i < reEncryptedResult.p1.length; ++i) {
         if (reEncryptedResult.p1[i] !== p1Data[i]) {
           throw new Error(
-            `byte at index ${i}/${reEncryptedResult.p1.length} differs: expected(${p1Data[i]}), actual(${reEncryptedResult.p1[i]})`
+            `p1 byte at index ${i}/${reEncryptedResult.p1.length} differs: expected(${p1Data[i]}), actual(${reEncryptedResult.p1[i]})`
           );
         }
       }
@@ -56,7 +65,7 @@ describe("sma", function () {
       for (let i = 0; i < reEncryptedResult.p2.length; ++i) {
         if (reEncryptedResult.p2[i] !== p2Data[i]) {
           throw new Error(
-            `byte at index ${i}/${reEncryptedResult.p2.length} differs: expected(${p2Data[i]}), actual(${reEncryptedResult.p2[i]})`
+            `p2 byte at index ${i}/${reEncryptedResult.p2.length} differs: expected(${p2Data[i]}), actual(${reEncryptedResult.p2[i]})`
           );
         }
       }
