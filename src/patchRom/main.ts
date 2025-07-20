@@ -2,7 +2,14 @@ import path from "node:path";
 import fsp from "node:fs/promises";
 import * as mkdirp from "mkdirp";
 import { execSync } from "node:child_process";
-import { P1_FILE_NAME, asmTmpDir, romTmpDir, tmpDir } from "./dirs";
+import {
+  P1_FILE_NAME,
+  P2_FILE_NAME,
+  SMA_FILE_NAME,
+  asmTmpDir,
+  romTmpDir,
+  tmpDir,
+} from "./dirs";
 import {
   AddressPromFilePathPatch,
   AddressPromPatch,
@@ -12,10 +19,11 @@ import {
   PatchJSON,
   StringPromPatch,
   AddressPromFileAvatarPathPatch,
-  P1FillPatch,
+  FillWordPatch,
 } from "./types";
 import { doPromPatch } from "./doPromPatch";
-import { doFillP1Patch } from "./doP1FillPatch";
+import { doFillWordPatch } from "./doFillWordPatch";
+import { smaDecrypt, smaEncrypt } from "./sma";
 
 function usage() {
   console.error(
@@ -24,14 +32,24 @@ function usage() {
   process.exit(1);
 }
 
-async function getProm(zipPath: string): Promise<Buffer> {
+async function getEntireDecryptedProm(zipPath: string): Promise<number[]> {
   const cmd = `unzip -o ${zipPath} -d ${romTmpDir}`;
   const cwd = path.resolve();
   console.log("About to do", cmd, "in", cwd);
   const output = execSync(cmd, { cwd });
   console.log(output.toString());
 
-  return fsp.readFile(path.resolve(romTmpDir, P1_FILE_NAME));
+  const smaData = Array.from(
+    await fsp.readFile(path.resolve(romTmpDir, SMA_FILE_NAME))
+  );
+  const p1Data = Array.from(
+    await fsp.readFile(path.resolve(romTmpDir, P1_FILE_NAME))
+  );
+  const p2Data = Array.from(
+    await fsp.readFile(path.resolve(romTmpDir, P2_FILE_NAME))
+  );
+
+  return smaDecrypt(smaData, p1Data, p2Data);
 }
 
 function flipBytes(data: number[]): number[] {
@@ -44,7 +62,7 @@ function flipBytes(data: number[]): number[] {
   return data;
 }
 
-function isP1FillPatch(obj: unknown): obj is P1FillPatch {
+function isFillWordPatch(obj: unknown): obj is FillWordPatch {
   if (!obj) {
     return false;
   }
@@ -53,9 +71,14 @@ function isP1FillPatch(obj: unknown): obj is P1FillPatch {
     return false;
   }
 
-  const p = obj as P1FillPatch;
+  const p = obj as FillWordPatch;
 
-  return p.type === "p1-fill" && typeof p.filler === "string";
+  return (
+    p.type === "prom-fill-word" &&
+    typeof p.fillerWord === "string" &&
+    typeof p.address === "number" &&
+    typeof p.size === "number"
+  );
 }
 
 function isStringPatch(obj: unknown): obj is StringPromPatch {
@@ -136,7 +159,7 @@ function isPatch(obj: unknown): obj is Patch {
     isAddressPatch(p) ||
     (isAddressFilePathPatch(p) && !isAddressFileAvatarPathPatch(p)) ||
     (isAddressFileAvatarPathPatch(p) && !isAddressFilePathPatch(p)) ||
-    isP1FillPatch(p)
+    isFillWordPatch(p)
   );
 }
 
@@ -174,14 +197,20 @@ function isPatchJSON(obj: unknown): obj is PatchJSON {
 }
 
 async function writePatchedZip(
-  promData: number[],
+  p1Data: number[],
+  p2Data: number[],
   cromBuffers: RomFileBuffer[],
   // fixBuffer: RomFileBuffer,
   outputPath: string
 ): Promise<void> {
   await fsp.writeFile(
     path.resolve(romTmpDir, P1_FILE_NAME),
-    new Uint8Array(promData)
+    new Uint8Array(p1Data)
+  );
+
+  await fsp.writeFile(
+    path.resolve(romTmpDir, P2_FILE_NAME),
+    new Uint8Array(p2Data)
   );
 
   // await fsp.writeFile(
@@ -245,123 +274,130 @@ function loadInitialSymbols(
 }
 
 async function main(patchJsonPaths: string[]) {
-  await fsp.rm(tmpDir, {
-    recursive: true,
-    force: true,
-    maxRetries: 5,
-    retryDelay: 1000,
-  });
-  mkdirp.sync(romTmpDir);
-  mkdirp.sync(asmTmpDir);
+  try {
+    await fsp.rm(tmpDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 1000,
+    });
+    mkdirp.sync(romTmpDir);
+    mkdirp.sync(asmTmpDir);
 
-  const flippedPromBuffer = await getProm(path.resolve("./kof99.zip"));
-  const flippedPromData = Array.from(flippedPromBuffer);
-  const promData = flipBytes(flippedPromData);
+    const flippedPromBuffer = await getEntireDecryptedProm(
+      path.resolve("./kof99.zip")
+    );
+    const flippedPromData = Array.from(flippedPromBuffer);
+    const promData = flipBytes(flippedPromData);
 
-  let patchedPromData = [...promData];
+    // the prom data inside the decrypted bundle starts 1mb in
+    // later it's important to reattach the starting meg during decryption
+    let patchedPromData = promData.slice(0x100000);
 
-  for (const patchJsonPath of patchJsonPaths) {
-    const jsonDir = path.dirname(patchJsonPath);
-    console.log("Starting patch", patchJsonPath);
+    for (const patchJsonPath of patchJsonPaths) {
+      const jsonDir = path.dirname(patchJsonPath);
+      console.log("Starting patch", patchJsonPath);
 
-    let patchJson: unknown;
-    try {
-      patchJson = require(patchJsonPath);
-    } catch (e) {
-      console.error("Error occured loading the patch", e);
-    }
-
-    if (!isPatchJSON(patchJson)) {
-      console.error(
-        "The JSON at",
-        patchJsonPath,
-        ", is not a valid patch file"
-      );
-      usage();
-    } else {
-      console.log("patch json", JSON.stringify(patchJson, null, 2));
-      if (
-        patchJson.patches.some(
-          (p) => isAddressPatch(p) && p.subroutine == true
-        ) &&
-        !patchJson.subroutineSpace
-      ) {
-        console.error(
-          "This patch contains subroutine patches, but did not specify subroutineSpace"
-        );
-        process.exit(1);
+      let patchJson: unknown;
+      try {
+        patchJson = require(patchJsonPath);
+      } catch (e) {
+        console.error("Error occured loading the patch", e);
       }
 
-      let symbolTable: Record<string, number> = loadInitialSymbols(
-        patchJson.symbols
-      );
-      const subroutineInsertStart = patchJson.subroutineSpace?.start
-        ? parseInt(patchJson.subroutineSpace.start, 16)
-        : 0;
-      let subroutineInsertEnd = patchJson.subroutineSpace?.end
-        ? parseInt(patchJson.subroutineSpace.end, 16)
-        : 0;
-
-      console.log(patchJson.description);
-
-      for (const patch of patchJson.patches) {
-        if (patch.skip) {
-          console.log("SKIPPING!", patch.description ?? "(unknown)");
-          continue;
-        }
-        console.log("next patch", patch.description ?? "(unknown)");
-
-        try {
-          if (isP1FillPatch(patch)) {
-            patchedPromData = doFillP1Patch(patch);
-          } else {
-            const hydratedPatch = await hydratePatch(patch, jsonDir);
-            const result = await doPromPatch(
-              symbolTable,
-              patchedPromData,
-              subroutineInsertEnd,
-              hydratedPatch
-            );
-            patchedPromData = result.patchedPromData;
-            subroutineInsertEnd = result.subroutineInsertEnd;
-            symbolTable = result.symbolTable;
-          }
-
-          if (
-            !!patchJson.subroutineSpace &&
-            subroutineInsertEnd < subroutineInsertStart
-          ) {
-            throw new Error("patch used up all of the subroutine space");
-          }
-        } catch (e) {
-          console.error(e);
+      if (!isPatchJSON(patchJson)) {
+        console.error(
+          "The JSON at",
+          patchJsonPath,
+          ", is not a valid patch file"
+        );
+        usage();
+      } else {
+        console.log("patch json", JSON.stringify(patchJson, null, 2));
+        if (
+          patchJson.patches.some(
+            (p) => isAddressPatch(p) && p.subroutine == true
+          ) &&
+          !patchJson.subroutineSpace
+        ) {
+          console.error(
+            "This patch contains subroutine patches, but did not specify subroutineSpace"
+          );
           process.exit(1);
         }
 
-        console.log("\n\n");
-      }
-      console.log(
-        `after patching, ${
-          subroutineInsertEnd - subroutineInsertStart
-        } bytes left for subroutines`
-      );
+        let symbolTable: Record<string, number> = loadInitialSymbols(
+          patchJson.symbols
+        );
+        const subroutineInsertStart = patchJson.subroutineSpace?.start
+          ? parseInt(patchJson.subroutineSpace.start, 16)
+          : 0;
+        let subroutineInsertEnd = patchJson.subroutineSpace?.end
+          ? parseInt(patchJson.subroutineSpace.end, 16)
+          : 0;
 
-      console.log("final symbols");
-      for (const entry of Object.entries(symbolTable)) {
-        console.log(entry[0], entry[1].toString(16));
+        console.log(patchJson.description);
+
+        for (const patch of patchJson.patches) {
+          if (patch.skip) {
+            console.log("SKIPPING!", patch.description ?? "(unknown)");
+            continue;
+          }
+          console.log("next patch", patch.description ?? "(unknown)");
+
+          try {
+            if (isFillWordPatch(patch)) {
+              patchedPromData = doFillWordPatch(patch, patchedPromData);
+            } else {
+              const hydratedPatch = await hydratePatch(patch, jsonDir);
+              const result = await doPromPatch(
+                symbolTable,
+                patchedPromData,
+                subroutineInsertEnd,
+                hydratedPatch
+              );
+              patchedPromData = result.patchedPromData;
+              subroutineInsertEnd = result.subroutineInsertEnd;
+              symbolTable = result.symbolTable;
+            }
+
+            if (
+              !!patchJson.subroutineSpace &&
+              subroutineInsertEnd < subroutineInsertStart
+            ) {
+              throw new Error("patch used up all of the subroutine space");
+            }
+          } catch (e) {
+            console.error(e);
+            process.exit(1);
+          }
+
+          console.log("\n\n");
+        }
+        console.log(
+          `after patching, ${
+            subroutineInsertEnd - subroutineInsertStart
+          } bytes left for subroutines`
+        );
+
+        console.log("final symbols");
+        for (const entry of Object.entries(symbolTable)) {
+          console.log(entry[0], entry[1].toString(16));
+        }
       }
     }
-  }
 
-  const flippedBackPatch = flipBytes(patchedPromData);
+    const flippedBackPromData = flipBytes(patchedPromData);
+    const startingMeg = flippedPromData.slice(0, 0x100000);
+    const fullPromBundleAfterPatch = startingMeg.concat(flippedBackPromData);
+    const reencrypted = smaEncrypt(fullPromBundleAfterPatch);
 
-  const mameDir = process.env.MAME_ROM_DIR;
+    const mameDir = process.env.MAME_ROM_DIR;
 
-  if (!mameDir?.trim()) {
-    throw new Error("MAME_ROM_DIR env variable is not set");
-  }
+    if (!mameDir?.trim()) {
+      throw new Error("MAME_ROM_DIR env variable is not set");
+    }
 
-  try {
     // const cromBuffers = await injectCromTiles();
     // const finalCromBuffers = await injectTitleBadgeTiles(cromBuffers);
     // const fixBuffer = await clearFixTiles();
@@ -370,7 +406,8 @@ async function main(patchJsonPaths: string[]) {
 
     const writePath = path.resolve(mameDir, "kof99.zip");
     await writePatchedZip(
-      flippedBackPatch,
+      reencrypted.p1,
+      reencrypted.p2,
       finalCromBuffers,
       // fixBuffer,
       writePath

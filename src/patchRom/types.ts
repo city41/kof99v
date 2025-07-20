@@ -1,5 +1,5 @@
 export type BasePatch = {
-  type: "crom" | "prom" | "p1-fill" | "p2-fill";
+  type: "crom" | "prom" | "prom-fill-word";
   description?: string;
   skip?: boolean;
 };
@@ -38,22 +38,18 @@ export type StringPromPatch = BasePromPatch & {
   value: string;
 };
 
-export type P1FillPatch = BasePatch & {
-  type: "p1-fill";
-  filler: string;
-};
-
-export type P2FillPatch = BasePatch & {
-  type: "p2-fill";
-  filler: string;
+export type FillWordPatch = BasePatch & {
+  type: "prom-fill-word";
+  fillerWord: string;
+  address: number;
+  size: number;
 };
 
 export type Patch =
   | AddressPromPatch
   | AddressPromFilePathPatch
   | StringPromPatch
-  | P1FillPatch
-  | P2FillPatch;
+  | FillWordPatch;
 
 export type InlinePatch = AddressPromPatch | StringPromPatch;
 

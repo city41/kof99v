@@ -2,9 +2,11 @@
   "description": "fill p1 with a dummy byte",
   "patches": [
     {
-      "type": "p1-fill",
+      "type": "prom-fill-word",
       "description": "fill p1 with a dummy byte",
-      "filler": "1"
+      "fillerWord": "abcd",
+      "address": 0,
+      "size": 1048576
     }
   ]
 }
