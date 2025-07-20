@@ -3,9 +3,9 @@ type SMAEncryptResult = {
   p2: number[];
 };
 
-// const dataSwapBitIndexesForEncryption = [
-//   0, 4, 15, 6, 2, 3, 11, 5, 14, 8, 9, 10, 13, 1, 7, 12,
-// ];
+const dataSwapBitIndexesForEncryption = [
+  0, 4, 15, 6, 2, 3, 11, 5, 14, 8, 9, 10, 13, 1, 7, 12,
+];
 
 const dataSwapBitIndexesForDecryption = [
   13, 7, 3, 0, 9, 4, 5, 6, 1, 12, 8, 14, 10, 11, 2, 15,
@@ -16,9 +16,9 @@ const p1AddressSwapBitIndexes = [
   13, 1,
 ];
 
-// const p2AddressSwapBitIndexesForEncryption = [
-//   15, 14, 13, 12, 11, 10, 6, 5, 2, 9, 0, 7, 4, 8, 3, 1,
-// ];
+const p2AddressSwapBitIndexesForEncryption = [
+  15, 14, 13, 12, 11, 10, 6, 5, 2, 9, 0, 7, 4, 8, 3, 1,
+];
 
 const p2AddressSwapBitIndexesForDecryption = [
   15, 14, 13, 12, 11, 10, 6, 2, 4, 9, 8, 3, 1, 7, 0, 5,
@@ -119,10 +119,60 @@ function smaDecrypt(
   return decrypted;
 }
 
-function smaEncrypt(_decryptedProm: number[]): SMAEncryptResult {
+function smaEncrypt(decryptedPromBundle: number[]): SMAEncryptResult {
+  const encrypted = [...decryptedPromBundle];
+
+  function insert(i: number, v: number) {
+    if (i < 0) {
+      throw new Error(`insert, index is negative: ${i}`);
+    }
+
+    if (i >= decryptedPromBundle.length) {
+      throw new Error(`insert, index out of range: ${i}`);
+    }
+
+    encrypted[i] = v;
+  }
+
+  const baseWordAddress = 0x100000 / 2;
+  for (let i = 0; i < 0x800000 / 2; i++) {
+    const wordAddress = baseWordAddress + i;
+    const byteAddress = wordAddress * 2;
+    const word = (encrypted[byteAddress + 1] << 8) | encrypted[byteAddress];
+    const swapped = bitswap(word, dataSwapBitIndexesForEncryption);
+    insert(byteAddress + 1, swapped >> 8);
+    insert(byteAddress, swapped & 0xff);
+  }
+
+  for (let i = 0; i < p2AddressOffset / 2; i += 0x010000 / 2) {
+    const copyWordIndexStart = 0x100000 / 2 + i;
+    const copyWordIndexEnd = copyWordIndexStart + 0x10000 / 2;
+    const buffer = encrypted.slice(
+      copyWordIndexStart * 2,
+      copyWordIndexEnd * 2
+    );
+
+    if (buffer.length !== 0x10000) {
+      throw new Error(
+        `expected buffer to be length 0x10000, got 0x${buffer.length.toString(
+          16
+        )}`
+      );
+    }
+
+    for (let j = 0; j < 0x10000 / 2; ++j) {
+      const wordAddress = 0x100000 / 2 + i + j;
+      const byteAddress = wordAddress * 2;
+      const bufferWordIndex = bitswap(j, p2AddressSwapBitIndexesForEncryption);
+      const bufferByteIndex = bufferWordIndex * 2;
+      insert(byteAddress, buffer[bufferByteIndex]);
+      insert(byteAddress + 1, buffer[bufferByteIndex + 1]);
+    }
+  }
+
   return {
-    p1: [],
-    p2: [],
+    p1: encrypted.slice(0x100000, 0x100000 + 0x400000),
+    p2: encrypted.slice(0x500000, 0x500000 + 0x400000),
   };
 }
 
