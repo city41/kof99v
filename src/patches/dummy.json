@@ -1,0 +1,11 @@
+{
+  "description": "dummy patch",
+  "patches": [
+    {
+      "type": "prom",
+      "description": "dummy test",
+      "address": "100000",
+      "patchAsm": ["moveq #$0, D0"]
+    }
+  ]
+}

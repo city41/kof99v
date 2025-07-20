@@ -1,0 +1,11 @@
+{
+  "description": "Make it so P1 pressing BC does not invoke a striker",
+  "patches": [
+    {
+      "type": "prom",
+      "description": "force the BC check routine to always return false",
+      "address": "107da",
+      "patchAsm": ["moveq #$0, D0"]
+    }
+  ]
+}

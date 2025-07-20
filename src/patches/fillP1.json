@@ -1,0 +1,10 @@
+{
+  "description": "fill p1 with a dummy byte",
+  "patches": [
+    {
+      "type": "p1-fill",
+      "description": "fill p1 with a dummy byte",
+      "filler": "1"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+
+What does it do?
+
+This program decrypts and encrypts SMA-protected games.  This, however, will not make
+them playable in emulators such as NeoRage-X, since they are protected as well as
+encrypted.
+
+
+How?
+
+Rename your p1 rom to "p1" (minus the quotes).
+Rename your p2 rom to "p2" (minus the quotes).
+Rename your sma rom to "sma" (minus the quotes).
+
+or
+
+Rename your decrypted rom to p1_decrypted
+this rom must be 8 or 9mb in size
+
+Next, run the program, tell it which game-type you wish to work with. Then, tell the 
+program whether you want to encrypt or decrypt the roms.
+
+
+--------------------------------------------
+
+IQ_132
+http://neosource.1emu.net/forums/
