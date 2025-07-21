@@ -13,60 +13,10 @@ const dataSwapBitIndexesForDecryption = [
 ];
 
 const p1AddressSwapBitIndexesForDecryption = [
-  23, // 23
-  22, // 22
-  21, // 21
-  20, // 20
-  19, // 19
-  18, // 18
+  23, 22, 21, 20, 19, 18,
 
-  11, // 17
-  6, // 16
-  14, // 15
-  17, // 14
-  16, // 13
-  5, // 12
-  8, // 11
-  10, // 10
-  12, // 9
-  0, // 8
-  4, // 7
-  3, // 6
-  2, // 5
-  7, // 4
-  9, // 3
-  15, // 2
-  13, // 1
-  1, // 0
+  11, 6, 14, 17, 16, 5, 8, 10, 12, 0, 4, 3, 2, 7, 9, 15, 13, 1,
 ];
-
-// const p1AddressSwapBitIndexesForEncryption = [
-//   23, // 23
-//   22, // 22
-//   21, // 21
-//   20, // 20
-//   19, // 19
-//   18, // 18
-
-//   14, // 17
-//   13, // 16
-//   2, // 15
-//   15, // 14
-//   1, // 13
-//   9, // 12
-//   17, // 11
-//   10, // 10
-//   3, // 9
-//   11, // 8
-//   4, // 7
-//   16, // 6
-//   12, // 5
-//   7, // 4
-//   6, // 3
-//   5, // 2
-//   0, // 1
-//   8, // 0
-// ];
 
 const p2AddressSwapBitIndexesForEncryption = [
   15, 14, 13, 12, 11, 10, 6, 5, 2, 9, 0, 7, 4, 8, 3, 1,
@@ -98,6 +48,7 @@ function bitswap(n: number, bitIndexes: number[]): number {
   return swapped;
 }
 
+// TODO: smaDecrypt and smaEncrypt share a lot of code
 function smaDecrypt(
   smaData: number[],
   p1Data: number[],
@@ -134,7 +85,7 @@ function smaDecrypt(
     insert(byteAddress, swapped & 0xff);
   }
 
-  // move words from various places down into the filler area, ahead of esma
+  // move words from various places down into the filler area, ahead of sma, to form the 1st meg of prom
   for (let i = 0; i < 0x0c0000 / 2; i++) {
     const wordAddress =
       p1AddressOffset / 2 + bitswap(i, p1AddressSwapBitIndexesForDecryption);
@@ -144,6 +95,8 @@ function smaDecrypt(
     insert(i * 2 + 1, decrypted[byteAddress + 1]);
   }
 
+  // within the 2nd through 7th meg in the prom data, do address descrambling
+  // to unscramble the words
   for (let i = 0; i < p2AddressOffset / 2; i += 0x010000 / 2) {
     const copyWordIndexStart = 0x100000 / 2 + i;
     const copyWordIndexEnd = copyWordIndexStart + 0x10000 / 2;
@@ -198,6 +151,7 @@ function smaEncrypt(decryptedPromBundle: number[]): SMAEncryptResult {
     insert(byteAddress + 1, encrypted[i * 2 + 1]);
   }
 
+  // rescramble the words in p1 and p2
   const baseWordAddress = 0x100000 / 2;
   for (let i = 0; i < 0x800000 / 2; i++) {
     const wordAddress = baseWordAddress + i;
@@ -208,6 +162,7 @@ function smaEncrypt(decryptedPromBundle: number[]): SMAEncryptResult {
     insert(byteAddress, swapped & 0xff);
   }
 
+  // move words around in meg 2 through 7 to accomplish address scrambling
   for (let i = 0; i < p2AddressOffset / 2; i += 0x010000 / 2) {
     const copyWordIndexStart = 0x100000 / 2 + i;
     const copyWordIndexEnd = copyWordIndexStart + 0x10000 / 2;
